@@ -12,7 +12,7 @@ PROCESSED_FILE = "processed_msgs.json"
 def load_processed_ids() -> set:
     if os.path.exists(PROCESSED_FILE):
         with open(PROCESSED_FILE, "r", encoding="utf-8") as f:
-            return set(json.load(f))
+            return set(str(x) for x in json.load(f))
     return set()
 
 
@@ -29,18 +29,26 @@ def main():
     while True:
         try:
             unread_chats = client.get_unread_chats()
+            if unread_chats:
+                print(f"[Проверка] Найдено чатов: {len(unread_chats)}")
 
             for chat in unread_chats:
-                order_id = chat["id_i"]
+                order_id = chat.get("id_i") or chat.get("order_id")
+                if not order_id:
+                    continue
+
                 messages = client.get_chat_messages(order_id)
 
                 for msg in messages:
-                    msg_id = msg["id"]
+                    msg_id = str(msg["id"])
+                    is_buyer = msg.get("buyer") in (1, True, "1") and not msg.get("admin")
+
                     # Пропускаем уже обработанные сообщения и сообщения от самого продавца
-                    if msg_id in processed_msgs or msg.get("buyer") != 1:
+                    if msg_id in processed_msgs or not is_buyer:
                         continue
 
-                    text = msg.get("message", "").strip().lower()
+                    text = str(msg.get("message", "")).strip().lower()
+                    print(f"[Заказ {order_id}] Новое сообщение от покупателя: {text}")
 
                     if "!код" in text:
                         print(f"[Заказ {order_id}] Получена команда !код")
@@ -51,6 +59,7 @@ def main():
                                 order_id,
                                 "Ваш заказ еще не оплачен. Пожалуйста, завершите оплату и повторите команду !код."
                             )
+                            print(f"[Заказ {order_id}] Заказ не оплачен.")
                         else:
                             product_id = order_info["product_id"]
                             mail_cfg = PRODUCTS_MAIL_MAP.get(product_id, DEFAULT_MAIL)
@@ -61,13 +70,14 @@ def main():
                                     order_id,
                                     f"Ваш код подтверждения: {code}\nСпасибо за покупку!"
                                 )
-                                send_tg_notification(order_id, order_info["product_name"], code)
                                 print(f"[Заказ {order_id}] Код {code} отправлен.")
+                                send_tg_notification(order_id, order_info["product_name"], code)
                             else:
                                 client.send_message(
                                     order_id,
                                     "Письмо с кодом еще не поступило на почту. Подождите 15–30 секунд и напишите !код снова."
                                 )
+                                print(f"[Заказ {order_id}] Письмо с кодом не найдено.")
 
                     # Сохраняем ID сообщения, чтобы не ответить на него повторно
                     processed_msgs.add(msg_id)
@@ -84,3 +94,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
