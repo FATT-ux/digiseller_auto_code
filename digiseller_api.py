@@ -41,17 +41,19 @@ class DigisellerClient:
         return self.token
 
     def get_unread_chats(self) -> list:
-        """Возвращает список чатов, в которых есть непрочитанные сообщения."""
+        """Возвращает список последних активных чатов (без привязки к статусу прочитано)."""
         token = self.get_token()
         url = f"{self.BASE_URL}/debates/v2/chats"
         params = {
             "token": token,
-            "filter_new": 1,  # 1 = только чаты с непрочитанными сообщениями
-            "pagesize": 50
+            "pagesize": 20
         }
         resp = requests.get(url, params=params, headers={"Accept": "application/json"}, timeout=15)
         resp.raise_for_status()
-        return resp.json().get("items", [])
+        data = resp.json()
+        if isinstance(data, list):
+            return data
+        return data.get("items") or data.get("chats") or []
 
     def get_chat_messages(self, order_id: int) -> list:
         """Получает список сообщений в конкретном заказе."""
@@ -103,3 +105,4 @@ class DigisellerClient:
             "product_id": content.get("item_id") or content.get("product_id"),
             "product_name": content.get("name", "Товар")
         }
+
